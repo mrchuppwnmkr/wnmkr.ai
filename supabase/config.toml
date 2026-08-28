@@ -1,0 +1,8 @@
+# Local development configuration for the Supabase CLI.
+# Third-Party Auth with Clerk — see specs/001-auth-user-model/research.md R-005.
+# The deprecated approach (a Clerk JWT template named "supabase" plus a shared JWT secret) is
+# deliberately NOT used.
+
+[auth.third_party.clerk]
+enabled = true
+domain = "REPLACE-ME.clerk.accounts.dev"

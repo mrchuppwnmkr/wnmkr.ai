@@ -7,12 +7,22 @@ This is an agentic AI winemaking consulting project built upon the combined know
 
 ## What's in this repo
 
+> **Note — two things live here right now.** `wnmkr.ai` is still served by GitHub Pages from
+> `index.html` on `main`. The Next.js application is being built on feature branches and is not
+> live yet. See [`docs/vercel-cutover.md`](docs/vercel-cutover.md) for how the switch happens.
+
+
 | Path | What it is |
 |---|---|
 | `index.html` | The public website at wnmkr.ai. One self-contained page — HTML and CSS inline, no dependencies, no build step. |
 | `assets/` | Optimized images used by the site. |
 | `user-stories.md` | Product requirements — epics, user stories, and acceptance criteria. |
 | `session-notes.md` | Working notes. |
+| `app/`, `lib/`, `components/` | The Next.js application — auth, user model and role gating. |
+| `supabase/migrations/` | Database schema. |
+| `specs/` | Spec Kit artifacts — one directory per feature, holding its spec, plan, research, data model, contracts and tasks. |
+| `.specify/memory/constitution.md` | The project constitution. Read this before changing how anything works. |
+| `docs/vercel-cutover.md` | How wnmkr.ai moves from GitHub Pages to Vercel. |
 | `.gitattributes` | Line-ending normalization. |
 
 ## The website
@@ -41,3 +51,25 @@ forever, so oversized images permanently inflate the repository.
 2. Make the change and check `index.html` in a browser
 3. Commit, push, open a pull request, review the diff, merge
 4. Merging to `main` publishes the site automatically via GitHub Pages
+
+## Working on the application
+
+```bash
+npm install
+cp .env.example .env.local     # then fill it in
+npm run dev
+```
+
+Before committing:
+
+```bash
+npm run lint
+npm run typecheck
+npm run build
+npm test
+```
+
+This project follows spec-driven development with [Spec Kit](https://github.com/github/spec-kit).
+Features start as a spec under `specs/`, progress through a plan and a task breakdown, and only
+then get implemented — see Principle I of the constitution. Setup and validation for the current
+feature are in `specs/001-auth-user-model/quickstart.md`.

@@ -14,6 +14,13 @@ and Constitution Principle III makes the gate-enforcement tests load-bearing rat
 the test that a route handler refuses on its own is what prevents layout-only protection from
 silently passing.
 
+> **Session status (2026-08-28)** — Phases 1, 2 and the implementation halves of Phases 3–5 are
+> complete and verified: `lint`, `typecheck`, `build` and the unit suite all pass. What remains is
+> the test coverage that needs live Clerk and Supabase credentials (T021–T023, T030–T032, T039,
+> T040), the manual dashboard configuration in T029, and Phase 6's T046–T048 and T052. `npm install`
+> has not been run in this working copy — dependencies were resolved and the lockfile committed,
+> but `node_modules` was deliberately not written across the device bridge.
+
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies on incomplete tasks)
@@ -30,13 +37,13 @@ Paths below are repository-relative.
 
 **Purpose**: Stand the application up. The existing static site stays in place — see T004.
 
-- [ ] T001 Scaffold Next.js 16 at the repository root with `create-next-app` (TypeScript, App Router, Tailwind, ESLint, no `src/` directory), merging into the existing repo rather than creating a subdirectory
-- [ ] T002 Install runtime dependencies: `@clerk/nextjs@^7.8`, `@supabase/supabase-js@^2.112`, `zod`
-- [ ] T003 [P] Install dev dependencies and wire scripts in `package.json`: `vitest`, `@playwright/test`, plus `test`, `test:e2e`, and `typecheck` scripts
-- [ ] T004 Preserve the live static site: confirm `index.html`, `CNAME` and `assets/` are untouched, and add `index.html` and `CNAME` to `.eslintignore` so the Next.js lint pass ignores them
-- [ ] T005 [P] Set TypeScript to strict in `tsconfig.json` and confirm `npx tsc --noEmit` passes on the bare scaffold
-- [ ] T006 [P] Write `.env.example` with every variable from `quickstart.md` §1, and verify `.env.local` is covered by `.gitignore`
-- [ ] T007 [P] Write `.gitignore` additions for `node_modules`, `.next`, `.vercel`, `test-results`, `playwright-report`
+- [x] T001 Scaffold Next.js 16 at the repository root with `create-next-app` (TypeScript, App Router, Tailwind, ESLint, no `src/` directory), merging into the existing repo rather than creating a subdirectory
+- [x] T002 Install runtime dependencies: `@clerk/nextjs@^7.8`, `@supabase/supabase-js@^2.112`, `zod`
+- [x] T003 [P] Install dev dependencies and wire scripts in `package.json`: `vitest`, `@playwright/test`, plus `test`, `test:e2e`, and `typecheck` scripts
+- [x] T004 Preserve the live static site: confirm `index.html`, `CNAME` and `assets/` are untouched, and add `index.html` and `CNAME` to `.eslintignore` so the Next.js lint pass ignores them
+- [x] T005 [P] Set TypeScript to strict in `tsconfig.json` and confirm `npx tsc --noEmit` passes on the bare scaffold
+- [x] T006 [P] Write `.env.example` with every variable from `quickstart.md` §1, and verify `.env.local` is covered by `.gitignore`
+- [x] T007 [P] Write `.gitignore` additions for `node_modules`, `.next`, `.vercel`, `test-results`, `playwright-report`
 
 **Checkpoint**: `npm run dev` serves a default Next.js page; the static site files are still intact.
 
@@ -49,19 +56,19 @@ done — every user story depends on `requireRole()` existing.
 
 **⚠️ CRITICAL**: No user story work begins until this phase is complete.
 
-- [ ] T008 Implement Zod-validated environment access in `lib/env.ts`, failing fast at boot with a named error per missing variable (quickstart §1)
-- [ ] T009 [P] Declare `CustomJwtSessionClaims { role?: string; tier?: string }` in `types/globals.d.ts` (research R-004)
-- [ ] T010 Create `proxy.ts` at the repository root with bare `clerkMiddleware()` and the matcher from research R-002 — including the `/__clerk/(.*)` entry. Do **not** use `createRouteMatcher` (R-001)
-- [ ] T011 Add `<ClerkProvider>` **inside** `<body>` in `app/layout.tsx`, with `<Show when="signed-in">` / `<Show when="signed-out">` header chrome (R-009)
-- [ ] T012 [P] Write `supabase/migrations/0001_users.sql`: the three enums, the `users` table, its CHECK constraints, indexes, `updated_at` trigger, RLS enabled, and the read-own-row policy (data-model)
-- [ ] T013 [P] Write `supabase/migrations/0002_role_changes.sql`: the `role_changes` table with FK `ON DELETE RESTRICT`, its index, and RLS enabled with **no** policy for `authenticated` (data-model)
-- [ ] T014 [P] Write `supabase/config.toml` with the `[auth.third_party.clerk]` block (R-005)
-- [ ] T015 Implement `lib/supabase/server.ts` — `createServerSupabaseClient()` using the publishable key and the `accessToken` callback returning `(await auth()).getToken()` (R-007)
-- [ ] T016 Implement `lib/supabase/admin.ts` — `createAdminSupabaseClient()` using `SUPABASE_SECRET_KEY`, with a file-header comment stating it bypasses RLS and is permitted only in the webhook handler and admin actions, and never combined with `accessToken`
-- [ ] T017 [P] Implement `lib/auth/roles.ts` — the `Role` and `Tier` unions, tier ordinal ordering, `tierFromRole()`, and `recomputeEntitlement()` as specified in data-model
-- [ ] T018 Implement `lib/auth/sync-user.ts` — idempotent upsert on `clerk_user_id`, used by both the webhook and the lazy fallback (R-008)
-- [ ] T019 Implement `lib/auth/require-role.ts` to the signature and behavioural contract in [contracts/role-guard.md](./contracts/role-guard.md): discriminated result, no permissive branch, fails closed, admin from `ADMIN_CLERK_USER_ID`, claim fast path with Supabase fallback and lazy upsert (depends on T015, T017, T018)
-- [ ] T020 [P] Write unit tests in `tests/unit/roles.test.ts` covering tier ordering for every pair, and an unrecognised role resolving to `free` rather than passing
+- [x] T008 Implement Zod-validated environment access in `lib/env.ts`, failing fast at boot with a named error per missing variable (quickstart §1)
+- [x] T009 [P] Declare `CustomJwtSessionClaims { role?: string; tier?: string }` in `types/globals.d.ts` (research R-004)
+- [x] T010 Create `proxy.ts` at the repository root with bare `clerkMiddleware()` and the matcher from research R-002 — including the `/__clerk/(.*)` entry. Do **not** use `createRouteMatcher` (R-001)
+- [x] T011 Add `<ClerkProvider>` **inside** `<body>` in `app/layout.tsx`, with `<Show when="signed-in">` / `<Show when="signed-out">` header chrome (R-009)
+- [x] T012 [P] Write `supabase/migrations/0001_users.sql`: the three enums, the `users` table, its CHECK constraints, indexes, `updated_at` trigger, RLS enabled, and the read-own-row policy (data-model)
+- [x] T013 [P] Write `supabase/migrations/0002_role_changes.sql`: the `role_changes` table with FK `ON DELETE RESTRICT`, its index, and RLS enabled with **no** policy for `authenticated` (data-model)
+- [x] T014 [P] Write `supabase/config.toml` with the `[auth.third_party.clerk]` block (R-005)
+- [x] T015 Implement `lib/supabase/server.ts` — `createServerSupabaseClient()` using the publishable key and the `accessToken` callback returning `(await auth()).getToken()` (R-007)
+- [x] T016 Implement `lib/supabase/admin.ts` — `createAdminSupabaseClient()` using `SUPABASE_SECRET_KEY`, with a file-header comment stating it bypasses RLS and is permitted only in the webhook handler and admin actions, and never combined with `accessToken`
+- [x] T017 [P] Implement `lib/auth/roles.ts` — the `Role` and `Tier` unions, tier ordinal ordering, `tierFromRole()`, and `recomputeEntitlement()` as specified in data-model
+- [x] T018 Implement `lib/auth/sync-user.ts` — idempotent upsert on `clerk_user_id`, used by both the webhook and the lazy fallback (R-008)
+- [x] T019 Implement `lib/auth/require-role.ts` to the signature and behavioural contract in [contracts/role-guard.md](./contracts/role-guard.md): discriminated result, no permissive branch, fails closed, admin from `ADMIN_CLERK_USER_ID`, claim fast path with Supabase fallback and lazy upsert (depends on T015, T017, T018)
+- [x] T020 [P] Write unit tests in `tests/unit/roles.test.ts` covering tier ordering for every pair, and an unrecognised role resolving to `free` rather than passing
 - [ ] T021 [P] Write unit tests in `tests/unit/require-role.test.ts` covering each failure discriminant and asserting no error escapes the function (contracts/role-guard.md test obligations)
 
 **Checkpoint**: Migrations apply, `requireRole()` is unit-tested, and the app boots with Clerk
@@ -85,11 +92,11 @@ system with no gated content required.
 
 ### Implementation for User Story 1
 
-- [ ] T024 [P] [US1] Create `app/auth/sign-in/[[...sign-in]]/page.tsx` rendering Clerk's `<SignIn />`, honouring a validated same-origin `return_to` query parameter (FR-006)
-- [ ] T025 [P] [US1] Create `app/auth/sign-up/[[...sign-up]]/page.tsx` rendering Clerk's `<SignUp />`
-- [ ] T026 [US1] Implement `app/api/webhooks/clerk/route.ts` using `verifyWebhook()` from `@clerk/nextjs/webhooks`, handling `user.created` / `user.updated` / `user.deleted` per [contracts/clerk-webhook.md](./contracts/clerk-webhook.md), writing through the admin client (depends on T016, T018)
-- [ ] T027 [US1] Port the landing page from `index.html` into `app/page.tsx`, reusing `assets/` and adding sign-in / sign-up entry points. Do not delete `index.html` — it remains the source of record until the Vercel cutover
-- [ ] T028 [P] [US1] Create `app/about/page.tsx` from the About content in the architecture doc
+- [x] T024 [P] [US1] Create `app/auth/sign-in/[[...sign-in]]/page.tsx` rendering Clerk's `<SignIn />`, honouring a validated same-origin `return_to` query parameter (FR-006)
+- [x] T025 [P] [US1] Create `app/auth/sign-up/[[...sign-up]]/page.tsx` rendering Clerk's `<SignUp />`
+- [x] T026 [US1] Implement `app/api/webhooks/clerk/route.ts` using `verifyWebhook()` from `@clerk/nextjs/webhooks`, handling `user.created` / `user.updated` / `user.deleted` per [contracts/clerk-webhook.md](./contracts/clerk-webhook.md), writing through the admin client (depends on T016, T018)
+- [x] T027 [US1] Port the landing page from `index.html` into `app/page.tsx`, reusing `assets/` and adding sign-in / sign-up entry points. Do not delete `index.html` — it remains the source of record until the Vercel cutover
+- [x] T028 [P] [US1] Create `app/about/page.tsx` from the About content in the architecture doc
 - [ ] T029 [US1] Confirm in the Clerk dashboard that password strength and breached-password rejection are enabled, and record the setting in `quickstart.md` §2 (FR-002)
 
 **Checkpoint**: US1 is independently demonstrable — a person can hold an account end to end.
@@ -115,12 +122,12 @@ directly.
 
 ### Implementation for User Story 2
 
-- [ ] T033 [US2] Create the `app/(subscriber)/layout.tsx` route-group guard calling `requireRole({ minTier: 'vintner' })`, redirecting on `unauthenticated`, rendering the upgrade prompt on `insufficient_tier`, and the unavailable state on `unavailable`
-- [ ] T034 [P] [US2] Create `app/(subscriber)/oak-calculator/page.tsx` as a guarded placeholder — the calculator itself is a later slice; this exists so the gate has a real subject
-- [ ] T035 [P] [US2] Build the upgrade prompt component in `components/upgrade-prompt.tsx`, naming what the subscription includes and linking to `/pricing` (FR-015)
-- [ ] T036 [P] [US2] Build the service-unavailable component in `components/service-unavailable.tsx` (FR-016)
-- [ ] T037 [US2] Create `app/admin/layout.tsx` calling `requireRole({ role: 'admin' })` and calling `notFound()` on refusal, so admin existence is never disclosed
-- [ ] T038 [US2] Add `revalidate = 0` / dynamic rendering to guarded segments so a gate decision is never served from a static or cached render — a cached gated page defeats FR-014
+- [x] T033 [US2] Create the `app/(subscriber)/layout.tsx` route-group guard calling `requireRole({ minTier: 'vintner' })`, redirecting on `unauthenticated`, rendering the upgrade prompt on `insufficient_tier`, and the unavailable state on `unavailable`
+- [x] T034 [P] [US2] Create `app/(subscriber)/oak-calculator/page.tsx` as a guarded placeholder — the calculator itself is a later slice; this exists so the gate has a real subject
+- [x] T035 [P] [US2] Build the upgrade prompt component in `components/upgrade-prompt.tsx`, naming what the subscription includes and linking to `/pricing` (FR-015)
+- [x] T036 [P] [US2] Build the service-unavailable component in `components/service-unavailable.tsx` (FR-016)
+- [x] T037 [US2] Create `app/admin/layout.tsx` calling `requireRole({ role: 'admin' })` and calling `notFound()` on refusal, so admin existence is never disclosed
+- [x] T038 [US2] Add `revalidate = 0` / dynamic rendering to guarded segments so a gate decision is never served from a static or cached render — a cached gated page defeats FR-014
 
 **Checkpoint**: The gate holds for every principal, by URL and by direct call.
 
@@ -143,11 +150,11 @@ confirm `/oak-calculator` opens for it without signing out, revoke, confirm it c
 
 ### Implementation for User Story 3
 
-- [ ] T041 [US3] Implement the shared admin-action preamble in `app/admin/users/actions.ts`: `requireRole({ role: 'admin' })` first, then the self-demotion refusal, then Zod validation — placed once so a future action cannot omit it (FR-020)
-- [ ] T042 [US3] Implement `listUsers` per [contracts/admin-actions.md](./contracts/admin-actions.md), reading through the admin client with case-insensitive email search and cursor pagination (FR-017)
-- [ ] T043 [US3] Implement `grantFounder`: default tier `cellar_master`, reject `free`, write `users` and `role_changes` in one transaction, update Clerk metadata so the session claim converges, `revalidatePath('/admin/users')` (FR-010, FR-019)
-- [ ] T044 [US3] Implement `revokeFounder` via `recomputeEntitlement()` rather than literal resets, with the same audit and revalidation obligations (FR-021)
-- [ ] T045 [US3] Build `app/admin/users/page.tsx` — the user list with email, role, tier, entitlement source and sign-up date, an email search box, and grant/revoke controls with a tier selector and optional reason field (FR-017, FR-018)
+- [x] T041 [US3] Implement the shared admin-action preamble in `app/admin/users/actions.ts`: `requireRole({ role: 'admin' })` first, then the self-demotion refusal, then Zod validation — placed once so a future action cannot omit it (FR-020)
+- [x] T042 [US3] Implement `listUsers` per [contracts/admin-actions.md](./contracts/admin-actions.md), reading through the admin client with case-insensitive email search and cursor pagination (FR-017)
+- [x] T043 [US3] Implement `grantFounder`: default tier `cellar_master`, reject `free`, write `users` and `role_changes` in one transaction, update Clerk metadata so the session claim converges, `revalidatePath('/admin/users')` (FR-010, FR-019)
+- [x] T044 [US3] Implement `revokeFounder` via `recomputeEntitlement()` rather than literal resets, with the same audit and revalidation obligations (FR-021)
+- [x] T045 [US3] Build `app/admin/users/page.tsx` — the user list with email, role, tier, entitlement source and sign-up date, an email search box, and grant/revoke controls with a tier selector and optional reason field (FR-017, FR-018)
 - [ ] T046 [P] [US3] Render the per-user `role_changes` history on the admin user row, so the audit trail is visible rather than only stored (FR-019)
 
 **Checkpoint**: Mike can onboard a Founder end to end. Phase 1's private beta is unblocked.
@@ -158,8 +165,8 @@ confirm `/oak-calculator` opens for it without signing out, revoke, confirm it c
 
 - [ ] T047 [P] Add structured server-side logging for every guard refusal and every admin mutation — actor, target, decision — without logging tokens or emails at debug level
 - [ ] T048 [P] Measure gate latency against SC-007 and record the median in `quickstart.md`; if it exceeds 100ms, the claim fast path is not being hit and R-004 needs revisiting
-- [ ] T049 [P] Update the root `README.md`: the repo now holds a Next.js app alongside the static site, with the branch/cutover situation explained
-- [ ] T050 [P] Write `docs/vercel-cutover.md` — the steps to point wnmkr.ai at Vercel and retire the GitHub Pages deployment, explicitly **not** performed in this slice
+- [x] T049 [P] Update the root `README.md`: the repo now holds a Next.js app alongside the static site, with the branch/cutover situation explained
+- [x] T050 [P] Write `docs/vercel-cutover.md` — the steps to point wnmkr.ai at Vercel and retire the GitHub Pages deployment, explicitly **not** performed in this slice
 - [ ] T051 Run the full gate: `npm run lint`, `npx tsc --noEmit`, `npm run build`, `npm test`, `npm run test:e2e`
 - [ ] T052 Re-read [checklists/requirements.md](./checklists/requirements.md) against the built code and correct any place the spec and the implementation have drifted — the spec is amended, not the record left stale (Constitution Principle I)
 
