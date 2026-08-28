@@ -38,8 +38,19 @@ is no Clerk token to scope RLS with (R-007). The service-role key is never combi
 - All writes are upserts keyed on `clerk_user_id`. Redelivery is a no-op.
 - Events may arrive out of order. `user.updated` for a `clerk_user_id` with no row inserts one
   rather than failing — the same upsert path as `user.created`.
-- The handler returns 200 on success. Any 5xx causes Clerk to retry, which is safe given the
-  upserts.
+- The handler returns 200 on success. **A failed write must raise**, not log and continue: a
+  swallowed error returned 200, and Clerk then never retried, so a lost deactivation was lost
+  permanently. Every write here is an idempotent upsert, so the retry a 5xx triggers is safe.
+
+## Email selection
+
+`users.email` is nullable. Only the address designated primary is stored, and only when its
+verification status is `verified`; otherwise the column is left null. Falling back to "whatever is
+first in the array" risks storing an unverified secondary address as someone's identity — and
+email is the only field the administrator searches on before granting Founder. A Clerk identity
+with no email at all is valid and must provision successfully; a `NOT NULL` constraint here turns
+that case into a permanent lockout, because provisioning fails and the guard then fails closed on
+every subsequent request.
 
 ## Test obligations
 
@@ -47,4 +58,7 @@ is no Clerk token to scope RLS with (R-007). The service-role key is never combi
 - Contract: `user.created` delivered twice produces exactly one row.
 - Contract: `user.updated` carrying a `role` field in its payload does not change the stored role.
 - Contract: `user.deleted` sets `is_active = false` and leaves `role_changes` rows intact.
+- Contract: a write failure returns 5xx, not 200, so Clerk retries.
+- Contract: a payload whose primary address is unverified stores null rather than that address.
+- Contract: a payload with no email addresses provisions a row successfully.
 - Contract: an unrecognised event type returns 200 and writes nothing.

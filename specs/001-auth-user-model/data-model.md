@@ -41,7 +41,7 @@ One row per Clerk identity (FR-007).
 |---|---|---|---|
 | `id` | `uuid` | PK, default `gen_random_uuid()` | Internal surrogate key |
 | `clerk_user_id` | `text` | UNIQUE, NOT NULL | **`text`, not `uuid`** — Clerk ids are `user_2ab…` (R-006) |
-| `email` | `text` | NOT NULL | Mirrored from Clerk for the admin search in FR-017 |
+| `email` | `text` | NULL allowed | Mirrored from Clerk for the admin search in FR-017. **Nullable on purpose**: a Clerk identity can exist with no email (phone sign-up, or an OAuth provider that returns none), and a NOT NULL constraint turns that into a permanent lockout — provisioning fails, and the guard then fails closed on every request |
 | `role` | `user_role` | NOT NULL, default `registered` | System of record for role |
 | `tier` | `entitlement_tier` | NOT NULL, default `free` | Stored separately so a Founder grant can set tier independently of role (FR-010) |
 | `entitlement_source` | `entitlement_source` | NOT NULL, default `none` | FR-009 |
@@ -54,8 +54,10 @@ One row per Clerk identity (FR-007).
 
 ### Validation rules
 
-- `email` must be non-empty. It is never used for authentication decisions — only for display and
-  search — so it is not treated as a unique key; Clerk owns email uniqueness.
+- `email` may be null, and is only ever populated from Clerk's designated primary address when
+  that address is verified. It is never an authentication input — only display and search — so it
+  is not a unique key; Clerk owns email uniqueness. It *is* the field an administrator searches
+  before granting Founder, which is why an unverified address is not stored.
 - `role = 'admin'` in this table is **display only**. The authoritative admin check is
   `clerk_user_id = ADMIN_CLERK_USER_ID` (R-010, FR-011). Code must never grant admin access from
   this column alone.
@@ -90,9 +92,32 @@ Append-only audit trail (FR-019). No UPDATE or DELETE path exists in application
 
 **Index**: btree on `(user_id, created_at desc)` — the per-user history view.
 
-**Concurrency**: the spec's edge case of two simultaneous admin writes resolves as last-write-wins
-on `users` with **both** attempts recorded in `role_changes`. The mutation therefore writes the
-audit row unconditionally, not only when the value changed.
+**Concurrency**: the spec's edge case of two simultaneous admin writes is handled by
+`set_user_entitlement` (below), which takes a row lock and compares the caller's expected role.
+The second writer gets `stale` rather than clobbering, so the newest `role_changes` row always
+describes the state that actually stuck. The audit row is written unconditionally, not only when
+the value changed.
+
+---
+
+## Function: `set_user_entitlement`
+
+```
+set_user_entitlement(
+  p_clerk_user_id text, p_expected_role user_role,
+  p_to_role user_role, p_to_tier entitlement_tier, p_to_source entitlement_source,
+  p_actor text, p_reason text default null
+) returns entitlement_change_result   -- 'ok' | 'not_found' | 'stale'
+```
+
+The only supported way to change a user's entitlement. It exists because the `users` UPDATE and
+the `role_changes` INSERT must be one transaction: as two separate PostgREST calls, a grant could
+commit while its audit row failed, leaving an unattributable privilege change that the UI still
+reported as successful — a direct violation of FR-019 and SC-005.
+
+`SECURITY DEFINER` with `search_path` pinned, and `EXECUTE` revoked from `public`, `anon` and
+`authenticated`. Only the service-role client can call it, and every caller is behind
+`requireRole({ role: 'admin' })`.
 
 ---
 

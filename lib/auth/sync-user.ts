@@ -5,7 +5,7 @@ import type { Role, Tier, EntitlementSource } from '@/lib/auth/roles'
 export type UserRow = {
   id: string
   clerk_user_id: string
-  email: string
+  email: string | null
   role: Role
   tier: Tier
   entitlement_source: EntitlementSource
@@ -17,24 +17,23 @@ export type UserRow = {
 /**
  * Idempotent provisioning upsert, keyed on clerk_user_id.
  *
- * Used by two paths (research.md R-008):
- *   - the Clerk webhook, which is the primary path;
- *   - a lazy fallback in requireRole(), which closes the webhook's eventual-consistency window
- *     and covers the spec's edge case of an identity with no application record.
+ * Used by two paths (research.md R-008): the Clerk webhook, which is primary; and a lazy fallback
+ * in requireRole(), which closes the webhook's eventual-consistency window.
  *
  * Deliberately never writes role, tier or entitlement_source on an existing row. Clerk is not the
  * system of record for entitlement; letting a profile update touch it would make user-editable
  * data an authorization input.
+ *
+ * `email` may be null — a Clerk identity can exist without one.
  */
-export async function ensureUserRow(clerkUserId: string, email: string): Promise<UserRow | null> {
+export async function ensureUserRow(
+  clerkUserId: string,
+  email: string | null,
+): Promise<UserRow | null> {
   const supabase = createAdminSupabaseClient()
-
   const { data, error } = await supabase
     .from('users')
-    .upsert(
-      { clerk_user_id: clerkUserId, email },
-      { onConflict: 'clerk_user_id', ignoreDuplicates: false },
-    )
+    .upsert({ clerk_user_id: clerkUserId, email }, { onConflict: 'clerk_user_id' })
     .select()
     .single()
 
@@ -45,12 +44,17 @@ export async function ensureUserRow(clerkUserId: string, email: string): Promise
   return data as UserRow
 }
 
-export async function updateUserEmail(clerkUserId: string, email: string): Promise<void> {
+/**
+ * The webhook variants throw rather than swallowing. A silent failure there returns 200 to Clerk,
+ * which then never retries — so a lost deactivation is lost permanently. Throwing surfaces as a
+ * 500, and every write here is an idempotent upsert, so the retry is safe.
+ */
+export async function updateUserEmail(clerkUserId: string, email: string | null): Promise<void> {
   const supabase = createAdminSupabaseClient()
   const { error } = await supabase
     .from('users')
     .upsert({ clerk_user_id: clerkUserId, email }, { onConflict: 'clerk_user_id' })
-  if (error) console.error('[sync-user] email update failed', { clerkUserId, error: error.message })
+  if (error) throw new Error(`email update failed for ${clerkUserId}: ${error.message}`)
 }
 
 export async function deactivateUser(clerkUserId: string): Promise<void> {
@@ -59,5 +63,5 @@ export async function deactivateUser(clerkUserId: string): Promise<void> {
     .from('users')
     .update({ is_active: false })
     .eq('clerk_user_id', clerkUserId)
-  if (error) console.error('[sync-user] deactivate failed', { clerkUserId, error: error.message })
+  if (error) throw new Error(`deactivate failed for ${clerkUserId}: ${error.message}`)
 }

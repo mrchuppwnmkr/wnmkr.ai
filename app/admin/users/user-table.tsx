@@ -56,7 +56,7 @@ export function UserTable({ users }: { users: AdminUserRow[] }) {
           {users.map((u) => (
             <tr key={u.id} className="border-b border-stone-200">
               <td className="py-2">
-                {u.email}
+                {u.email ?? <span className="text-stone-400">(no email)</span>}
                 {!u.is_active && <span className="ml-2 text-xs text-stone-400">(deactivated)</span>}
               </td>
               <td className="py-2">{u.role}</td>

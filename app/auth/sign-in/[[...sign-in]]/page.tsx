@@ -1,5 +1,5 @@
 import { SignIn } from '@clerk/nextjs'
-import { safeReturnTo } from '@/lib/auth/require-role'
+import { safeReturnTo } from '@/lib/auth/return-to'
 
 export default async function SignInPage({
   searchParams,

@@ -21,8 +21,9 @@ export async function POST(req: NextRequest) {
   try {
     switch (evt.type) {
       case 'user.created': {
-        const email = primaryEmail(evt.data)
-        await ensureUserRow(evt.data.id, email)
+        const created = await ensureUserRow(evt.data.id, primaryEmail(evt.data))
+        // A swallowed failure would return 200 and Clerk would never retry, losing the row.
+        if (!created) throw new Error(`provisioning failed for ${evt.data.id}`)
         break
       }
       case 'user.updated': {
@@ -49,12 +50,24 @@ export async function POST(req: NextRequest) {
 
 type ClerkEmailPayload = {
   primary_email_address_id?: string | null
-  email_addresses?: { id: string; email_address: string }[]
+  email_addresses?: {
+    id: string
+    email_address: string
+    verification?: { status?: string | null } | null
+  }[]
 }
 
-function primaryEmail(data: unknown): string {
+/**
+ * The address the admin UI will show and search on. Only the designated primary is used, and only
+ * when verified — falling back to "whatever is first in the array" risks storing an unverified
+ * secondary address as someone's identity, which is what an administrator then grants Founder to.
+ * Returns null rather than guessing; the column is nullable for exactly this case.
+ */
+function primaryEmail(data: unknown): string | null {
   const d = data as ClerkEmailPayload
-  const addresses = d.email_addresses ?? []
-  const primary = addresses.find((a) => a.id === d.primary_email_address_id) ?? addresses[0]
-  return primary?.email_address ?? ''
+  const primary = (d.email_addresses ?? []).find((a) => a.id === d.primary_email_address_id)
+  if (!primary) return null
+  const status = primary.verification?.status
+  if (status && status !== 'verified') return null
+  return primary.email_address ?? null
 }

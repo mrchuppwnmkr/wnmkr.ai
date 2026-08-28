@@ -37,13 +37,15 @@ admin server actions.
 
 **Project Type**: Web application — Next.js full stack, frontend and API routes in one deployment.
 
-**Performance Goals**: Gate decision adds ≤100ms at the median (SC-007), achieved by reading the
-role from the Clerk session claim on the hot path rather than querying Postgres per request.
+**Performance Goals**: Gate decision adds ≤100ms at the median (SC-007), via a single indexed
+lookup on `users.clerk_user_id`. An earlier design read the role from the session claim to avoid
+that lookup; review showed it could leave a revoked user permanently entitled, so it was removed
+(research R-004).
 
-**Constraints**: Custom session-token claims must stay under ~1.2KB or the session cookie silently
-fails to set (R-004) — only `role` and `tier` go in the token. Role changes are visible within one
-session-token refresh (<60s) on read paths, and immediately on admin paths, which reads from
-Postgres directly.
+**Constraints**: Entitlement is resolved from Postgres on every gated request; the session claim
+is a display mirror and never an authorization input (R-004). Custom session-token claims must
+still stay under ~1.2KB or the cookie silently fails to set, so only `role` and `tier` are
+mirrored. Role changes take effect on the very next request, with no staleness window.
 
 **Scale/Scope**: 1–2 Founders at launch, low hundreds of accounts within Phase 1. Two database
 tables, one guard module, four route groups, one admin screen. No payment integration in this
@@ -57,7 +59,7 @@ slice.
 |---|---|---|---|
 | I. Spec-Driven Delivery | Feature has spec.md before code; artifacts live with the code | PASS — `spec.md` written and validated before any implementation | PASS — plan, research, data model, contracts, quickstart all committed on this branch |
 | II. Production-Lite, Not Prototype | No auth stubs, no mock user store; works against real Clerk and Supabase | PASS — Clerk-hosted components and a real Supabase schema; no fixture layer | PASS — `quickstart.md` validates against live projects, not mocks |
-| III. Deny by Default | Server-enforced at the resource; nothing client-only; undeclared access is denied | PASS — one `requireRole()` guard, called in every protected layout and independently in every handler | PASS — guard returns a discriminated result with no permissive default branch; unknown role maps to free tier |
+| III. Deny by Default | Server-enforced at the resource; nothing client-only; undeclared access is denied | PASS — one `requireRole()` guard, called in every protected layout and independently in every handler and page | PASS after review — guard returns a discriminated result with no permissive default branch; unknown role maps to free tier; entitlement always read from the system of record; `is_active` enforced on every path |
 | IV. Sourced Domain Values | No invented winemaking constants | PASS — not applicable, this slice contains no domain calculations | PASS — unchanged |
 | V. Cost Ceilings Are Features | Anthropic API paths ship with their caps | PASS — not applicable, no model calls in this slice | PASS — the `tier` field this slice creates is the field the consultant's quota will read |
 
@@ -157,3 +159,13 @@ cutover, not for this slice.
   verification, event handling and idempotency requirements.
 - [quickstart.md](./quickstart.md) — the manual dashboard configuration that cannot be scripted,
   plus the runnable validation sequence for each acceptance scenario.
+
+## Post-implementation review
+
+An adversarial review of the implemented slice found twelve defects, seven of which were fixed in
+the same branch: the session-claim fast path (research R-004), an `is_active` bypass, a
+backslash/control-character open redirect in `safeReturnTo`, a non-transactional entitlement change
+that could grant access with no audit row, authorization running after input validation in two
+server actions, a `NOT NULL` email constraint that permanently locked out identities with no email
+address, and webhook write failures returning 200 so Clerk never retried. The artifacts above were
+amended to match — the spec is not left trailing the code (Principle I).

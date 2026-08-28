@@ -2,21 +2,28 @@
 
 **Module**: `app/admin/users/actions.ts` | **Feature**: `specs/001-auth-user-model`
 
-Three mutations, all Server Actions. Every one begins with `await requireRole({ role: 'admin' })`
-as its first statement (FR-012), reads current state from Postgres rather than from the session
-claim (R-004), and writes a `role_changes` row in the same transaction as the `users` update
-(FR-019).
+Three actions, all Server Actions. Server actions in a `'use server'` file are publicly invocable —
+being rendered inside `/admin` restricts nothing — so every one calls
+`await requireRole({ role: 'admin' })` as its **first statement**, before input is even parsed
+(FR-012). Reads come from Postgres, never from a session claim (R-004). The `users` update and the
+`role_changes` insert happen inside one Postgres function, `set_user_entitlement`, so they land
+together or not at all (FR-019).
 
 ## `listUsers`
 
 ```ts
 listUsers(input: { query?: string; limit?: number; cursor?: string })
-  : Promise<{ users: AdminUserRow[]; nextCursor: string | null }>
+  : Promise<ActionResult<{ users: AdminUserRow[]; nextCursor: string | null }>>
 ```
 
 Returns email, role, tier, entitlement source, sign-up date and active flag (FR-017). `query` is a
-case-insensitive match against email. Reads through the service-role client because an
+case-insensitive match against email, with `%` and `_` escaped so a literal search stays literal.
+`cursor` is the `created_at` of the last row of the previous page; one extra row is fetched to
+decide `nextCursor` without a second query. Reads through the service-role client because an
 administrator legitimately reads rows that are not their own, which RLS forbids.
+
+A database failure returns `unavailable`, never `not_found` — "no users match" and "the directory
+is down" must not look the same to the administrator.
 
 ## `grantFounder`
 
@@ -50,14 +57,19 @@ whatever the live subscription confers, with no change to this action.
    per action, so a new action cannot forget it.
 2. **Input is validated with Zod** before any database access. `clerkUserId` must match Clerk's id
    shape; `tier` must be a member of the enum; `reason` is capped at 500 characters.
-3. **Audit is written unconditionally**, even when the new value equals the old one. This is what
-   makes the concurrent-write edge case in the spec resolve to "later write wins, both recorded".
-4. **Refusals are typed, never thrown.** A thrown error crossing the server-action boundary leaks
+3. **Audit is written unconditionally**, even when the new value equals the old one — inside
+   `set_user_entitlement`, so it cannot be lost while the `users` update succeeds.
+4. **Optimistic concurrency.** Each mutation passes the role it just read as `p_expected_role`. If
+   another administrator changed the row in between, the function returns `stale` and the action
+   returns `{ ok: false, error: 'stale' }` rather than clobbering. This is what makes the newest
+   `role_changes` row actually describe the state that stuck.
+5. **Refusals are typed, never thrown.** A thrown error crossing the server-action boundary leaks
    stack structure to the client.
-5. **`revalidatePath('/admin/users')`** after every successful mutation, so the list reflects the
+6. **`revalidatePath('/admin/users')`** after every successful mutation, so the list reflects the
    change without a manual refresh.
-6. **Clerk metadata is updated in the same operation** so the affected user's session claim
-   converges promptly rather than waiting a full refresh cycle (R-004).
+7. **Clerk metadata is mirrored after the transaction commits.** It is a convenience for
+   debugging in the Clerk dashboard, not an access control — the guard reads Postgres — so its
+   failure is logged and does not fail an operation that has already committed.
 
 ## Test obligations
 
@@ -65,6 +77,9 @@ whatever the live subscription confers, with no change to this action.
 - Contract: `grantFounder` on the admin's own id returns `forbidden`.
 - Contract: a successful grant produces exactly one `users` update and exactly one `role_changes`
   row, with `from_*` matching the pre-state.
+- Contract: an unauthenticated caller gets `forbidden`, not `invalid_input` — authorization runs
+  before validation, so the action is not an input-format oracle.
+- Contract: a concurrent change between read and write returns `stale` and leaves the row alone.
 - Contract: `revokeFounder` on a non-Founder returns `not_founder` and writes nothing.
 - Integration: grant → the target's next request to `/oak-calculator` renders; revoke → the next
   request shows the upgrade prompt.

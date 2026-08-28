@@ -17,7 +17,10 @@ create table public.users (
   id                 uuid primary key default gen_random_uuid(),
   -- text, not uuid: Clerk ids look like user_2ab... and are not UUIDs.
   clerk_user_id      text               not null unique,
-  email              text               not null check (length(trim(email)) > 0),
+  -- Nullable on purpose. Clerk identities can exist without an email (phone sign-up, or an
+  -- OAuth provider that returns none). A NOT NULL constraint here turns that into a permanent
+  -- lockout, because provisioning fails and the guard then fails closed on every request.
+  email              text,
   role               user_role          not null default 'registered',
   tier               entitlement_tier   not null default 'free',
   entitlement_source entitlement_source not null default 'none',

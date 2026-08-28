@@ -71,34 +71,33 @@ which lets one `requireRole()` helper serve all three.
 
 ## R-004: Where the role lives at request time
 
-**Decision**: The role is stored in Supabase as the system of record and mirrored into the Clerk
-session token as a custom claim, via Dashboard → Sessions → Customize session token. Read it as
-`sessionClaims.role`, typed through a global `CustomJwtSessionClaims` interface. On any request
-where the claim is absent or stale, fall back to a Supabase read.
+**Decision (revised after adversarial review, 2026-08-28)**: Supabase is read on **every** request.
+Role and tier are also mirrored into Clerk `publicMetadata` and appear as session claims, but that
+mirror is for display and debugging only — no authorization decision reads it.
 
-**Rationale**: A claim read is free; a database round-trip on every gated page request is not, and
-SC-007 caps gate cost at 100ms median. Storing the authoritative value in Postgres keeps the audit
-trail and the admin UI coherent.
+**Rationale**: the original decision here was a session-claim fast path with a database fallback
+only when a claim was absent. Review found three defects in it, and they compound:
 
-**Constraint discovered**: the session token is a cookie, browsers cap cookies at 4KB, and Clerk's
-own default claims consume most of it — roughly **1.2KB is available for custom claims**. Exceeding
-it makes the cookie silently fail to set, which breaks the app in a way that looks like a session
-bug. We put one short string (`role`) and one short string (`tier`) in the token and nothing else.
+1. Once a user had any role in `publicMetadata`, the claim was always present, so Postgres — the
+   declared system of record — was never read for that user again. The only thing keeping the claim
+   honest was the metadata write during a grant or revoke, and that write can fail. A revoke whose
+   metadata update 429'd left the user **permanently** entitled, with the admin UI showing the
+   correct revoked state. Not the bounded <60s staleness this section originally signed off on.
+2. `is_active` was checked on the database path and skipped on the claim path, so a deactivated
+   Founder kept access while a deactivated free user did not — the check applied to exactly the
+   accounts it mattered least for.
+3. It made an authorization decision out of a token value rather than a system-of-record value.
+   That is only as safe as the dashboard claim configuration, which lives outside the repository
+   and which nothing in code asserts. Pointing the claim at `unsafe_metadata` — user-writable
+   through Clerk's frontend API — would have turned it into self-service privilege escalation.
 
-**Staleness handling**: FR-014 requires a role change to take effect on the next request without
-sign-out. Clerk refreshes the session token roughly every 60 seconds, so a claim-only read could
-serve a stale role for up to a minute. Therefore: `requireRole()` reads the claim for the fast path,
-but any admin-initiated role change calls Clerk's backend to update the user's metadata immediately,
-and the admin mutation path itself always reads from Supabase rather than the claim. Documented as
-a known bounded staleness of <60s for tier changes, 0s for admin operations.
+**Cost of the revision**: one indexed primary-key lookup per gated request instead of zero. SC-007's
+100ms median budget must now be measured rather than assumed (task T048). If it is missed, the
+correct fix is a short-TTL server-side cache keyed on the Clerk user id — not a trusted claim.
 
-**Naming note**: "JWT Templates" and "customize session token" are now two different features. JWT
-Templates are not deprecated but are for minting separate tokens for third-party services; the docs
-explicitly steer this use case to custom session claims.
-
-**Source**: https://clerk.com/docs/guides/sessions/customize-session-tokens
-
----
+**Consequence**: `types/globals.d.ts` still declares the claim shape, and `syncClaims()` still
+writes it, because it is useful in Clerk's dashboard when debugging a user. A comment in
+`require-role.ts` records that it must not become an input again.
 
 ## R-005: Clerk → Supabase connection
 
@@ -231,5 +230,5 @@ grant mutation.
 | Item | Disposition |
 |---|---|
 | Clerk dashboard configuration (session claim, Supabase integration) is manual | Documented in `quickstart.md`; cannot be scripted |
-| Session-claim staleness up to ~60s for tier changes | Accepted and documented in R-004; admin paths read from Postgres |
+| Gate latency now includes one Postgres lookup per request | Must be measured against SC-007 (T048); a short-TTL server cache is the fix if missed, never a trusted claim |
 | TypeScript 7 is current on npm | Let `create-next-app` pin the toolchain rather than forcing a version |

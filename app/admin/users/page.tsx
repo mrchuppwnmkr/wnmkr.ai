@@ -9,10 +9,15 @@ export default async function AdminUsersPage({
   searchParams: Promise<{ q?: string }>
 }) {
   const { q } = await searchParams
+  // listUsers re-checks admin itself; the layout guard is not assumed to have run.
   const result = await listUsers({ query: q })
 
   if (!result.ok) {
-    return <p className="text-sm text-stone-600">Could not load users ({result.error}).</p>
+    const message =
+      result.error === 'unavailable'
+        ? 'The user directory is temporarily unavailable.'
+        : `Could not load users (${result.error}).`
+    return <p className="text-sm text-stone-600">{message}</p>
   }
 
   return (

@@ -172,6 +172,34 @@ confirm `/oak-calculator` opens for it without signing out, revoke, confirm it c
 
 ---
 
+## Review findings (2026-08-28)
+
+An adversarial review of the implemented slice found twelve defects. Seven were fixed on this
+branch, with `research.md`, `plan.md`, `data-model.md` and the contracts amended to match:
+
+- [x] R-1 Session-claim fast path could leave a revoked Founder permanently entitled when the
+      Clerk metadata write failed — removed; entitlement is read from Postgres every request
+- [x] R-2 `is_active` was enforced on the database path and skipped on the claim path
+- [x] R-3 `safeReturnTo` open redirect via backslash and control characters (`/\evil.com`)
+- [x] R-4 `users` update and `role_changes` insert were not transactional; a grant could commit
+      with no audit row and still report success — now one `set_user_entitlement` function
+- [x] R-5 `returnTo` was hardcoded to `/` and never read; the layout built it from an unvalidated
+      header instead — the guard now captures and validates it
+- [x] R-6 Authorization ran after input validation in `grantFounder` and `revokeFounder`
+- [x] R-7 `email NOT NULL` permanently locked out identities with no email; webhook write failures
+      returned 200 so Clerk never retried
+- [x] R-8 No optimistic concurrency on entitlement writes — `p_expected_role` added
+- [x] R-11 `listUsers` reported a database failure as `not_found` and had no pagination
+- [x] R-12 Webhook stored an arbitrary, possibly unverified email address
+
+Two are documented rather than code-fixed, and are follow-up work:
+
+- [ ] R-9 `Principal.email` is now always populated (the fast path that emptied it is gone) — verify with a contract test
+- [ ] R-10 Layout guards are backstops, not the control: every page in a guarded group must call
+      `requireRole()` itself. Done for `/oak-calculator`; must hold for every page added later
+
+---
+
 ## Dependencies
 
 ```
